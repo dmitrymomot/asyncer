@@ -49,6 +49,18 @@ func NewEnqueuer(client *asynq.Client, opt ...EnqueuerOption) *Enqueuer {
 	return e
 }
 
+// NewEnqueuerWithClient creates a new email enqueuer with the given redis connection string.
+// This function accepts EnqueuerOption to configure the enqueuer.
+// Default values are used if no option is provided.
+func NewEnqueuerWithClient(redisConn string, opt ...EnqueuerOption) *Enqueuer {
+	client, _, err := NewClient(redisConn)
+	if err != nil {
+		panic(err)
+	}
+
+	return NewEnqueuer(client)
+}
+
 // EnqueueTask enqueues a task to the queue.
 // This function returns an error if the task could not be enqueued.
 // The task is enqueued with the following options:
