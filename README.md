@@ -15,6 +15,10 @@ The asyncer just wrapps [hibiken/asynq](https://github.com/hibiken/asynq) packag
 
 See [_example](https://github.com/dmitrymomot/asyncer/tree/main/_example) directory for usage examples.
 
+## Todo
+
+- [ ] Add tests
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](https://github.com/dmitrymomot/asyncer/tree/main/LICENSE) file for details. This project contains some code from [hibiken/asynq](https://github.com/hibiken/asynq) package, which is also licensed under the MIT License.
