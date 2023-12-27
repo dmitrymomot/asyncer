@@ -58,3 +58,12 @@ func WithQueueLogLevel(level string) QueueServerOption {
 		cnf.LogLevel = getAsynqLogLevel(level)
 	}
 }
+
+// WithQueueLogger sets the queue logger.
+func WithQueueLogger(logger asynq.Logger) QueueServerOption {
+	return func(cnf *asynq.Config) {
+		if logger != nil {
+			cnf.Logger = logger
+		}
+	}
+}

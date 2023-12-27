@@ -23,7 +23,7 @@ type (
 )
 
 // NewQueueServer creates a new queue client and returns the server.
-func NewQueueServer(redisConnOpt asynq.RedisConnOpt, log asynq.Logger, opts ...QueueServerOption) *QueueServer {
+func NewQueueServer(redisConnOpt asynq.RedisConnOpt, opts ...QueueServerOption) *QueueServer {
 	// Get the number of available CPUs.
 	useProcs := runtime.GOMAXPROCS(0)
 	if useProcs == 0 {
@@ -42,7 +42,6 @@ func NewQueueServer(redisConnOpt asynq.RedisConnOpt, log asynq.Logger, opts ...Q
 
 	cnf := asynq.Config{
 		Concurrency:     workerConcurrency,
-		Logger:          log,
 		LogLevel:        getAsynqLogLevel(workerLogLevel),
 		ShutdownTimeout: workerShutdownTimeout,
 		Queues: map[string]int{
