@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
+
 	"github.com/dmitrymomot/asyncer"
-	utils "github.com/dmitrymomot/go-utils"
-	"github.com/hibiken/asynq"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -16,22 +16,15 @@ func main() {
 	})
 	defer func() { logger.Info("Server successfully shutdown") }()
 
-	// Redis connect options for asynq client
-	redisConnOpt, err := asynq.ParseRedisURI("redis://localhost:6379/0") // TODO: Add your redis connection string
-	if err != nil {
-		logger.WithError(err).Fatal("failed to parse redis connection string")
-	}
-
 	// Init asynq client
-	asynqClient := asynq.NewClient(redisConnOpt)
+	asynqClient, redisConnOpt, err := asyncer.NewClient("redis://localhost:6379/0")
+	if err != nil {
+		logger.WithError(err).Fatal("Failed to create asynq client")
+	}
 	defer asynqClient.Close()
 
-	// Create a context with a timeout and set the Server's context
-	ctx, cancel := utils.NewContextWithCancel(logger.WithField("component", "context"))
-	defer cancel()
-
 	// Create a new errgroup
-	eg, _ := errgroup.WithContext(ctx)
+	eg, _ := errgroup.WithContext(context.Background())
 
 	// Create a new scheduler server with the given options
 	schedulerServer := asyncer.NewSchedulerServer(
