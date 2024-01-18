@@ -13,13 +13,89 @@
 This is a simple, reliable, and efficient distributed task queue in Go.
 The asyncer just wrapps [hibiken/asynq](https://github.com/hibiken/asynq) package with some predefined settings. So, if you need more flexibility, you can use [hibiken/asynq](https://github.com/hibiken/asynq) directly.
 
+## Installation
+
+To install the `asyncer` package, use the following command:
+
+```bash
+go get github.com/dmitrymomot/asyncer
+```
+
 ## Usage
 
-See [_example](https://github.com/dmitrymomot/asyncer/tree/main/_example) directory for usage examples.
+In this example, we will create a simple task that prints a greeting message to the console.
+Also, we will create a scheduler that will run the task every hour.
 
-## Todo
+```go
+package main
 
-- [ ] Add tests
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/dmitrymomot/asyncer"
+)
+
+const redisAddr = "redis://localhost:6379/0"
+const TestTaskName = "testTask1"
+
+type TestTaskPayload struct {
+    Name string
+}
+
+// test task handler function
+func testTaskHandler(ctx context.Context, payload TestTaskPayload) error {
+    fmt.Printf("Hello, %s!\n", payload.Name)
+    return nil
+}
+
+func main() {
+    // Create a new enqueuer with redis as the broker.
+    enqueuer := asyncer.MustNewEnqueuer(redisAddr)
+    defer enqueuer.Close()
+
+    // Enqueue a task with payload.
+    // The task will be processed after immediately.
+    if err := enqueuer.EnqueueTask(context.TODO(), TestTaskName, testTaskPayload{Name: "test"}); err != nil {
+        panic(err)
+    }
+
+    eg, _ := errgroup.WithContext(context.Background())
+
+    // Run a new queue server with redis as the broker.
+    eg.Go(asyncer.RunQueueServer(
+        redisAddr, nil, 
+        // Register a handler for the task.
+        asyncer.HandlerFunc[TestTaskPayload](TestTaskName, testTaskHandler),
+        // ... add more handlers here ...
+    ))
+
+    // Run a scheduler with redis as the broker.
+    // The scheduler will schedule tasks to be enqueued at a specified time. 
+	eg.Go(asyncer.RunSchedulerServer(
+		redisAddr, nil,
+        // Schedule the testTask1 task to be enqueued every hour.
+		asyncer.ScheduledHandlerFunc[Payload]("@every 1h", TestTaskName),
+        // ... add more scheduled tasks here ...
+	))
+    
+    // Wait for the queue server to exit.
+    if err := eg.Wait(); err != nil {
+        panic(err)
+    }
+}
+```
+
+## Contributing
+
+Contributions to the `asyncer` package are welcome! Here are some ways you can contribute:
+
+- Reporting bugs
+- Additional tests cases
+- Suggesting enhancements
+- Submitting pull requests
+- Sharing the love by telling others about this project
 
 ## License
 
