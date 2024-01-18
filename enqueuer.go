@@ -2,7 +2,8 @@ package asyncer
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -23,16 +24,17 @@ type (
 	EnqueuerOption func(*Enqueuer)
 )
 
-// NewEnqueuer creates a new email enqueuer.
-// This function accepts EnqueuerOption to configure the enqueuer.
+// NewEnqueuerWithAsynqClient creates a new Enqueuer with the given Asynq client and options.
+// It returns a pointer to the Enqueuer and an error if the Asynq client is nil.
+// The Enqueuer is responsible for enqueueing tasks to the Asynq server.
 // Default values are used if no option is provided.
 // Default values are:
 //   - queue name: "default"
 //   - task deadline: 1 minute
 //   - max retry: 3
-func NewEnqueuer(client *asynq.Client, opt ...EnqueuerOption) *Enqueuer {
+func NewEnqueuerWithAsynqClient(client *asynq.Client, opt ...EnqueuerOption) (*Enqueuer, error) {
 	if client == nil {
-		panic("client is nil")
+		return nil, ErrMissedAsynqClient
 	}
 
 	e := &Enqueuer{
@@ -46,37 +48,73 @@ func NewEnqueuer(client *asynq.Client, opt ...EnqueuerOption) *Enqueuer {
 		o(e)
 	}
 
-	return e
+	return e, nil
 }
 
-// NewEnqueuerWithClient creates a new email enqueuer with the given redis connection string.
-// This function accepts EnqueuerOption to configure the enqueuer.
-// Default values are used if no option is provided.
-func NewEnqueuerWithClient(redisConn string, opt ...EnqueuerOption) *Enqueuer {
-	client, _, err := NewClient(redisConn)
+// MustNewEnqueuerWithAsynqClient creates a new Enqueuer with the given Asynq client and options.
+// It panics if an error occurs during the creation of the Enqueuer.
+func MustNewEnqueuerWithAsynqClient(client *asynq.Client, opt ...EnqueuerOption) *Enqueuer {
+	e, err := NewEnqueuerWithAsynqClient(client, opt...)
 	if err != nil {
 		panic(err)
 	}
 
-	return NewEnqueuer(client)
+	return e
 }
 
-// EnqueueTask enqueues a task to the queue.
-// This function returns an error if the task could not be enqueued.
-// The task is enqueued with the following options:
-//   - queue name: e.queueName
-//   - task deadline: e.taskDeadline
-//   - max retry: e.maxRetry
-//   - unique: e.taskDeadline
-func (e *Enqueuer) EnqueueTask(ctx context.Context, task *asynq.Task) error {
+// NewEnqueuer creates a new Enqueuer with the given Redis connection string and options.
+// Default values are used if no option is provided.
+// It returns a pointer to the Enqueuer and an error if there was a problem creating the Enqueuer.
+func NewEnqueuer(redisConn string, opt ...EnqueuerOption) (*Enqueuer, error) {
+	client, _, err := NewClient(redisConn)
+	if err != nil {
+		return nil, errors.Join(ErrFailedToCreateEnqueuerWithClient, err)
+	}
+
+	return NewEnqueuerWithAsynqClient(client)
+}
+
+// MustNewEnqueuer creates a new Enqueuer with the given Redis connection string and options.
+// It panics if an error occurs during the creation of the Enqueuer.
+func MustNewEnqueuer(redisConn string, opt ...EnqueuerOption) *Enqueuer {
+	e, err := NewEnqueuer(redisConn, opt...)
+	if err != nil {
+		panic(err)
+	}
+
+	return e
+}
+
+// EnqueueTask enqueues a task to be processed asynchronously.
+// It takes a context and a task as parameters.
+// The task is enqueued with the specified queue name, deadline, maximum retry count, and uniqueness constraint.
+// Returns an error if the task fails to enqueue.
+func (e *Enqueuer) EnqueueTask(ctx context.Context, taskName string, payload any) error {
+	// Marshal payload to JSON bytes
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return errors.Join(ErrFailedToEnqueueTask, err)
+	}
+
+	// Enqueue task
 	if _, err := e.client.Enqueue(
-		task,
+		asynq.NewTask(taskName, jsonPayload),
 		asynq.Queue(e.queueName),
 		asynq.Deadline(time.Now().Add(e.taskDeadline)),
 		asynq.MaxRetry(e.maxRetry),
 		asynq.Unique(e.taskDeadline),
 	); err != nil {
-		return fmt.Errorf("failed to enqueue task: %w", err)
+		return errors.Join(ErrFailedToEnqueueTask, err)
+	}
+
+	return nil
+}
+
+// Close closes the Enqueuer and releases any resources associated with it.
+// It returns an error if there was a problem closing the Enqueuer.
+func (e *Enqueuer) Close() error {
+	if err := e.client.Close(); err != nil {
+		return errors.Join(ErrFailedToCloseEnqueuer, err)
 	}
 
 	return nil
