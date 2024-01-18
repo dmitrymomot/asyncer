@@ -55,7 +55,7 @@ func WithQueueShutdownTimeout(timeout time.Duration) QueueServerOption {
 // WithQueueLogLevel sets the queue log level.
 func WithQueueLogLevel(level string) QueueServerOption {
 	return func(cnf *asynq.Config) {
-		cnf.LogLevel = getAsynqLogLevel(level)
+		cnf.LogLevel = castToAsynqLogLevel(level)
 	}
 }
 

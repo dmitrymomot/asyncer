@@ -1,6 +1,8 @@
 package asyncer
 
 import (
+	"context"
+	"errors"
 	"runtime"
 	"time"
 
@@ -10,19 +12,23 @@ import (
 type (
 	// QueueServer is a wrapper for asynq.Server.
 	QueueServer struct {
-		*asynq.Server
+		asynq *asynq.Server
 	}
 
 	// QueueServerOption is a function that configures a QueueServer.
 	QueueServerOption func(*asynq.Config)
 
-	// taskHandler is an interface for task handlers.
-	taskHandler interface {
-		Register(*asynq.ServeMux)
+	// TaskHandler is an interface for task handlers.
+	// It is used to register task handlers in the queue server.
+	TaskHandler interface {
+		TaskName() string
+		Handle(ctx context.Context, payload []byte) error
 	}
 )
 
-// NewQueueServer creates a new queue client and returns the server.
+// NewQueueServer creates a new instance of QueueServer.
+// It takes a redis connection option and optional queue server options.
+// The function returns a pointer to the created QueueServer.
 func NewQueueServer(redisConnOpt asynq.RedisConnOpt, opts ...QueueServerOption) *QueueServer {
 	// Get the number of available CPUs.
 	useProcs := runtime.GOMAXPROCS(0)
@@ -42,7 +48,7 @@ func NewQueueServer(redisConnOpt asynq.RedisConnOpt, opts ...QueueServerOption) 
 
 	cnf := asynq.Config{
 		Concurrency:     workerConcurrency,
-		LogLevel:        getAsynqLogLevel(workerLogLevel),
+		LogLevel:        castToAsynqLogLevel(workerLogLevel),
 		ShutdownTimeout: workerShutdownTimeout,
 		Queues: map[string]int{
 			queueName: workerConcurrency,
@@ -54,10 +60,10 @@ func NewQueueServer(redisConnOpt asynq.RedisConnOpt, opts ...QueueServerOption) 
 		opt(&cnf)
 	}
 
-	return &QueueServer{Server: asynq.NewServer(redisConnOpt, cnf)}
+	return &QueueServer{asynq: asynq.NewServer(redisConnOpt, cnf)}
 }
 
-// Run  creates a new queue client, registers task handlers and runs the server.
+// Run starts the queue server and registers the provided task handlers.
 // It returns a function that can be used to run server in a error group.
 // E.g.:
 //
@@ -66,28 +72,31 @@ func NewQueueServer(redisConnOpt asynq.RedisConnOpt, opts ...QueueServerOption) 
 //		NewTaskHandler1(),
 //		NewTaskHandler2(),
 //	))
-func (srv *QueueServer) Run(handlers ...taskHandler) func() error {
+//
+// The function returns an error if the server fails to start.
+func (srv *QueueServer) Run(handlers ...TaskHandler) func() error {
 	return func() error {
+		mux := asynq.NewServeMux()
+
+		// Register handlers
+		for _, h := range handlers {
+			mux.HandleFunc(h.TaskName(), func(ctx context.Context, t *asynq.Task) error {
+				return h.Handle(ctx, t.Payload())
+			})
+		}
+
 		// Run server
-		return srv.Server.Run(registerQueueHandlers(handlers...))
+		if err := srv.asynq.Run(mux); err != nil {
+			return errors.Join(ErrFailedToStartQueueServer, err)
+		}
+
+		return nil
 	}
-}
-
-// registerQueueHandlers registers handlers for each task type.
-func registerQueueHandlers(handlers ...taskHandler) *asynq.ServeMux {
-	mux := asynq.NewServeMux()
-
-	// Register handlers
-	for _, h := range handlers {
-		h.Register(mux)
-	}
-
-	return mux
 }
 
 // Shutdown gracefully shuts down the queue server by waiting for all
 // in-flight tasks to finish processing before shutdown.
 func (srv *QueueServer) Shutdown() {
-	srv.Server.Stop()
-	srv.Server.Shutdown()
+	srv.asynq.Stop()
+	srv.asynq.Shutdown()
 }
