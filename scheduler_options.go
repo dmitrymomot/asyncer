@@ -5,7 +5,14 @@ import "github.com/hibiken/asynq"
 // WithSchedulerLogLevel sets the scheduler log level.
 func WithSchedulerLogLevel(level string) SchedulerServerOption {
 	return func(cnf *asynq.SchedulerOpts) {
-		cnf.LogLevel = getAsynqLogLevel(level)
+		cnf.LogLevel = castToAsynqLogLevel(level)
+	}
+}
+
+// WithSchedulerLogger sets the scheduler logger.
+func WithSchedulerLogger(logger asynq.Logger) SchedulerServerOption {
+	return func(cnf *asynq.SchedulerOpts) {
+		cnf.Logger = logger
 	}
 }
 

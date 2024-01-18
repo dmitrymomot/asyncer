@@ -12,4 +12,6 @@ var (
 	ErrFailedToStartQueueServer         = errors.New("failed to start queue server")
 	ErrFailedToUnmarshalPayload         = errors.New("failed to unmarshal payload")
 	ErrFailedToRunQueueServer           = errors.New("failed to run queue server")
+	ErrFailedToScheduleTask             = errors.New("failed to schedule task")
+	ErrFailedToStartSchedulerServer     = errors.New("failed to start scheduler server")
 )
