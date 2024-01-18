@@ -69,8 +69,8 @@ func NewQueueServer(redisConnOpt asynq.RedisConnOpt, opts ...QueueServerOption) 
 //
 //	eg, ctx := errgroup.WithContext(context.Background())
 //	eg.Go(queueServer.Run(
-//		NewTaskHandler1(),
-//		NewTaskHandler2(),
+//		yourapp.NewTaskHandler1(),
+//		yourapp.NewTaskHandler2(),
 //	))
 //
 // The function returns an error if the server fails to start.
@@ -99,4 +99,35 @@ func (srv *QueueServer) Run(handlers ...TaskHandler) func() error {
 func (srv *QueueServer) Shutdown() {
 	srv.asynq.Stop()
 	srv.asynq.Shutdown()
+}
+
+// RunQueueServer starts the queue server and registers the provided task handlers.
+// It returns a function that can be used to run server in a error group.
+// E.g.:
+//
+//	eg, _ := errgroup.WithContext(context.Background())
+//	eg.Go(asyncer.RunQueueServer(
+//		asyncer.HandlerFunc[PayloadStruct1]("task1", task1Handler),
+//		asyncer.HandlerFunc[PayloadStruct2]("task2", task2Handler),
+//	))
+//
+//	func task1Handler(ctx context.Context, payload PayloadStruct1) error {
+//		// ...
+//	}
+//
+//	func task2Handler(ctx context.Context, payload PayloadStruct2) error {
+//		// ...
+//	}
+//
+// The function panics if the redis connection string is invalid.
+// The function returns an error if the server fails to start.
+func RunQueueServer(redisConnStr string, handlers ...TaskHandler) func() error {
+	// Redis connect options for asynq client
+	redisConnOpt, err := asynq.ParseRedisURI(redisConnStr)
+	if err != nil {
+		panic(errors.Join(ErrFailedToRunQueueServer, err))
+	}
+
+	// Init queue server
+	return NewQueueServer(redisConnOpt).Run(handlers...)
 }
