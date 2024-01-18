@@ -10,14 +10,17 @@ type (
 	// TaskHandler is an interface for task handlers.
 	// It is used to register task handlers in the queue server.
 	TaskHandler interface {
+		// TaskName returns the name of the task. It is used to register the task handler.
 		TaskName() string
+		// Handle handles the task. It takes a context and a payload as parameters.
 		Handle(ctx context.Context, payload []byte) error
 	}
 
 	// ScheduledTaskHandler is an interface for scheduled task handlers.
 	// It is used to register scheduled task handlers in the scheduler server.
 	ScheduledTaskHandler interface {
-		TaskHandler
+		// TaskName returns the name of the task. It is used to register the task handler.
+		TaskName() string
 		// Schedule returns the cron spec for the task.
 		// For more information about cron spec, see https://pkg.go.dev/github.com/robfig/cron/v3#hdr-CRON_Expression_Format.
 		Schedule() string
@@ -38,17 +41,22 @@ type (
 	}
 )
 
-// TaskName returns the name of the task.
+// TaskName returns the name of the task handled by the handlerFuncWrapper.
+// It is a method of the handlerFuncWrapper type.
 func (h *handlerFuncWrapper[Payload]) TaskName() string {
 	return h.name
 }
 
-// Schedule returns the cron spec for the task.
+// Schedule returns the cron specification for the handler function.
+// It specifies when the handler function should be scheduled to run.
 func (h *handlerFuncWrapper[Payload]) Schedule() string {
 	return h.cronSpec
 }
 
-// Handle handles the task.
+// Handle is a method that handles the given payload by unmarshaling it and calling the wrapped handler function.
+// It takes a context.Context and a []byte payload as input and returns an error.
+// The payload is unmarshaled into a Payload struct, and if the unmarshaling fails, an error is returned.
+// Otherwise, the wrapped handler function is called with the context and unmarshaled payload.
 func (h *handlerFuncWrapper[Payload]) Handle(ctx context.Context, payload []byte) error {
 	var p Payload
 	if err := json.Unmarshal(payload, &p); err != nil {
@@ -76,10 +84,9 @@ func HandlerFunc[Payload any](name string, fn handlerFunc[Payload]) TaskHandler 
 // The fn parameter is the actual handler function.
 // The ScheduledTaskHandler returned by ScheduledHandlerFunc is responsible for executing the handler function when a task of the specified payload type is received.
 // The payload type is specified using the generic type parameter Payload.
-func ScheduledHandlerFunc[Payload any](cronSpec string, name string, fn handlerFunc[Payload]) ScheduledTaskHandler {
+func ScheduledHandlerFunc[Payload any](cronSpec string, name string) ScheduledTaskHandler {
 	return &handlerFuncWrapper[Payload]{
 		name:     name,
 		cronSpec: cronSpec,
-		fn:       fn,
 	}
 }

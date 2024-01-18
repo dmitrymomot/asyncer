@@ -76,15 +76,23 @@ func (srv *SchedulerServer) Shutdown() {
 //	eg.Go(asyncer.RunSchedulerServer(
 //		"redis://localhost:6379",
 //		logger,
-//		asyncer.ScheduledHandlerFunc[Payload]("@every 1h", "scheduled_task_1", scheduledTaskHandler),
+//		asyncer.ScheduledHandlerFunc[Payload]("@every 1h", "scheduled_task_1"),
+//	))
+
+//	eg.Go(asyncer.RunQueueServer(
+//		"redis://localhost:6379",
+//		logger,
+//		asyncer.HandlerFunc[Payload]("scheduled_task_1", scheduledTaskHandler),
 //	))
 //
-//	func scheduledTaskHandler(ctx context.Context, payload PayloadStruct1) error {
+//	func scheduledTaskHandler(ctx context.Context, payload Payload) error {
 //		// ...handle task here...
 //	}
 //
 // The function returns an error if the server fails to start.
 // The function panics if the Redis connection string is invalid.
+//
+// !!! Pay attention, that the scheduler just triggers the job, so you need to run queue server as well.
 func RunSchedulerServer(redisConnStr string, log asynq.Logger, handlers ...ScheduledTaskHandler) func() error {
 	// Redis connect options for asynq client
 	redisConnOpt, err := asynq.ParseRedisURI(redisConnStr)
