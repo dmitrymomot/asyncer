@@ -2,29 +2,10 @@ package asyncer
 
 import (
 	"time"
-
-	"github.com/hibiken/asynq"
 )
 
-// get asynq log level by string.
-func getAsynqLogLevel(level string) asynq.LogLevel {
-	switch level {
-	case "debug":
-		return asynq.DebugLevel
-	case "info":
-		return asynq.InfoLevel
-	case "warn":
-		return asynq.WarnLevel
-	case "error":
-		return asynq.ErrorLevel
-	case "fatal":
-		return asynq.FatalLevel
-	default:
-		return asynq.InfoLevel
-	}
-}
-
-// parseLocation parses a location from a string.
+// parseLocation parses the given timeZone string and returns a pointer to a time.Location.
+// If the timeZone string is invalid, it returns a pointer to the UTC time.Location.
 //
 // If the name is "" or "UTC", LoadLocation returns UTC.
 // If the name is "Local", LoadLocation returns Local.
