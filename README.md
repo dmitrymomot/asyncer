@@ -92,7 +92,7 @@ func main() {
 Contributions to the `asyncer` package are welcome! Here are some ways you can contribute:
 
 - Reporting bugs
-- Additional tests cases
+- **Covering code with tests**
 - Suggesting enhancements
 - Submitting pull requests
 - Sharing the love by telling others about this project
