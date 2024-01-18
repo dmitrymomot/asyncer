@@ -17,13 +17,6 @@ type (
 
 	// QueueServerOption is a function that configures a QueueServer.
 	QueueServerOption func(*asynq.Config)
-
-	// TaskHandler is an interface for task handlers.
-	// It is used to register task handlers in the queue server.
-	TaskHandler interface {
-		TaskName() string
-		Handle(ctx context.Context, payload []byte) error
-	}
 )
 
 // NewQueueServer creates a new instance of QueueServer.
@@ -107,27 +100,35 @@ func (srv *QueueServer) Shutdown() {
 //
 //	eg, _ := errgroup.WithContext(context.Background())
 //	eg.Go(asyncer.RunQueueServer(
+//		"redis://localhost:6379",
+//		logger,
 //		asyncer.HandlerFunc[PayloadStruct1]("task1", task1Handler),
 //		asyncer.HandlerFunc[PayloadStruct2]("task2", task2Handler),
 //	))
 //
 //	func task1Handler(ctx context.Context, payload PayloadStruct1) error {
-//		// ...
+//		// ... handle task here ...
 //	}
 //
 //	func task2Handler(ctx context.Context, payload PayloadStruct2) error {
-//		// ...
+//		// ... handle task here ...
 //	}
 //
 // The function panics if the redis connection string is invalid.
 // The function returns an error if the server fails to start.
-func RunQueueServer(redisConnStr string, handlers ...TaskHandler) func() error {
+func RunQueueServer(redisConnStr string, log asynq.Logger, handlers ...TaskHandler) func() error {
 	// Redis connect options for asynq client
 	redisConnOpt, err := asynq.ParseRedisURI(redisConnStr)
 	if err != nil {
 		panic(errors.Join(ErrFailedToRunQueueServer, err))
 	}
 
+	// Queue server options
+	opts := []QueueServerOption{}
+	if log != nil {
+		opts = append(opts, WithQueueLogger(log))
+	}
+
 	// Init queue server
-	return NewQueueServer(redisConnOpt).Run(handlers...)
+	return NewQueueServer(redisConnOpt, opts...).Run(handlers...)
 }
