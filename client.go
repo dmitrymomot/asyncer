@@ -1,17 +1,18 @@
 package asyncer
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/hibiken/asynq"
 )
 
-// NewClient creates a new asynq client from the given redis client instance.
+// NewClient creates a new instance of the asynq client using the provided Redis connection string.
+// It returns the created client, the Redis connection options, and any error encountered during the process.
 func NewClient(redisConnStr string) (*asynq.Client, asynq.RedisConnOpt, error) {
 	// Redis connect options for asynq client
 	redisConnOpt, err := asynq.ParseRedisURI(redisConnStr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("worket.NewClient: failed to parse redis connection string: %w", err)
+		return nil, nil, errors.Join(ErrFailedToParseRedisURI, err)
 	}
 
 	// Init asynq client
