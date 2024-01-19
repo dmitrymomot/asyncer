@@ -23,67 +23,128 @@ go get github.com/dmitrymomot/asyncer
 
 ## Usage
 
-In this example, we will create a simple task that prints a greeting message to the console.
-Also, we will create a scheduler that will run the task every hour.
+### Queued tasks
+
+In this example, we will create a simple task that prints a greeting message to the console:
 
 ```go
 package main
 
 import (
-    "context"
-    "fmt"
-    "time"
+	"context"
+	"fmt"
+	"time"
 
-    "github.com/dmitrymomot/asyncer"
+	"github.com/dmitrymomot/asyncer"
+	"golang.org/x/sync/errgroup"
 )
 
-const redisAddr = "redis://localhost:6379/0"
-const TestTaskName = "testTask1"
+const (
+	redisAddr    = "redis://localhost:6379/0"
+	TestTaskName = "queued_task"
+)
 
 type TestTaskPayload struct {
-    Name string
+	Name string
 }
 
 // test task handler function
 func testTaskHandler(ctx context.Context, payload TestTaskPayload) error {
-    fmt.Printf("Hello, %s!\n", payload.Name)
-    return nil
+	fmt.Printf("Hello, %s!\n", payload.Name)
+	return nil
 }
 
 func main() {
-    // Create a new enqueuer with redis as the broker.
-    enqueuer := asyncer.MustNewEnqueuer(redisAddr)
-    defer enqueuer.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-    // Enqueue a task with payload.
-    // The task will be processed after immediately.
-    if err := enqueuer.EnqueueTask(context.TODO(), TestTaskName, testTaskPayload{Name: "test"}); err != nil {
-        panic(err)
-    }
+	eg, _ := errgroup.WithContext(ctx)
 
-    eg, _ := errgroup.WithContext(context.Background())
-
-    // Run a new queue server with redis as the broker.
-    eg.Go(asyncer.RunQueueServer(
-        redisAddr, nil, 
-        // Register a handler for the task.
-        asyncer.HandlerFunc[TestTaskPayload](TestTaskName, testTaskHandler),
-        // ... add more handlers here ...
-    ))
-
-    // Run a scheduler with redis as the broker.
-    // The scheduler will schedule tasks to be enqueued at a specified time. 
-	eg.Go(asyncer.RunSchedulerServer(
-		redisAddr, nil,
-        // Schedule the testTask1 task to be enqueued every hour.
-		asyncer.ScheduledHandlerFunc[Payload]("@every 1h", TestTaskName),
-        // ... add more scheduled tasks here ...
+	// Run a new queue server with redis as the broker.
+	eg.Go(asyncer.RunQueueServer(
+		ctx, redisAddr, nil,
+		// Register a handler for the task.
+		asyncer.HandlerFunc[TestTaskPayload](TestTaskName, testTaskHandler),
+		// ... add more handlers here ...
 	))
-    
-    // Wait for the queue server to exit.
-    if err := eg.Wait(); err != nil {
-        panic(err)
-    }
+
+	// Create a new enqueuer with redis as the broker.
+	enqueuer := asyncer.MustNewEnqueuer(redisAddr)
+	defer enqueuer.Close()
+
+	// Enqueue a task with payload.
+	// The task will be processed after immediately.
+	for i := 0; i < 10; i++ {
+		if err := enqueuer.EnqueueTask(ctx, TestTaskName, TestTaskPayload{
+			Name: fmt.Sprintf("Test %d", i),
+		}); err != nil {
+			panic(err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Wait for the queue server to exit.
+	if err := eg.Wait(); err != nil {
+		panic(err)
+	}
+}
+```
+
+### Scheduled tasks (Cron jobs)
+
+Create a task that prints a greeting message to the console every 1 seconds:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/dmitrymomot/asyncer"
+	"golang.org/x/sync/errgroup"
+)
+
+const (
+	redisAddr    = "redis://localhost:6379/0"
+	TestTaskName = "scheduled_task"
+)
+
+type TestTaskPayload struct {
+	Name string
+}
+
+// test task handler function
+func testTaskHandler(ctx context.Context) error {
+	fmt.Println("scheduled test task handler called at", time.Now().Format(time.RFC3339))
+	return nil
+}
+
+func main() {
+	eg, ctx := errgroup.WithContext(context.Background())
+
+	// Run a new queue server with redis as the broker.
+	eg.Go(asyncer.RunQueueServer(
+		ctx, redisAddr, nil,
+		// Register a handler for the task.
+		asyncer.ScheduledHandlerFunc(TestTaskName, testTaskHandler),
+		// ... add more handlers here ...
+	))
+
+	// Run a scheduler with redis as the broker.
+	// The scheduler will schedule tasks to be enqueued at a specified time.
+	eg.Go(asyncer.RunSchedulerServer(
+		ctx, redisAddr, nil,
+		// Schedule the scheduled_task task to be enqueued every 1 seconds.
+		asyncer.NewTaskScheduler("@every 1s", TestTaskName),
+		// ... add more scheduled tasks here ...
+	))
+
+	// Wait for the queue server to exit.
+	if err := eg.Wait(); err != nil {
+		panic(err)
+	}
 }
 ```
 
