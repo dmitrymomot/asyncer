@@ -14,4 +14,7 @@ var (
 	ErrFailedToRunQueueServer           = errors.New("failed to run queue server")
 	ErrFailedToScheduleTask             = errors.New("failed to schedule task")
 	ErrFailedToStartSchedulerServer     = errors.New("failed to start scheduler server")
+	ErrCronSpecIsEmpty                  = errors.New("cron spec is empty")
+	ErrTaskNameIsEmpty                  = errors.New("task name is empty")
+	ErrFailedToRunSchedulerServer       = errors.New("failed to run scheduler server")
 )

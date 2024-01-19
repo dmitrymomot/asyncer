@@ -1,10 +1,12 @@
 package asyncer
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/hibiken/asynq"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -30,29 +32,35 @@ func NewSchedulerServer(redisConnOpt asynq.RedisConnOpt, opts ...SchedulerServer
 		opt(cnf)
 	}
 
-	return &SchedulerServer{asynq: asynq.NewScheduler(redisConnOpt, cnf)}
+	return &SchedulerServer{
+		asynq: asynq.NewScheduler(redisConnOpt, cnf),
+	}
+}
+
+// ScheduleTask schedules a task based on the given cron specification and task name.
+// It returns an error if the cron specification or task name is empty, or if there was an error registering the task.
+func (srv *SchedulerServer) ScheduleTask(cronSpec, taskName string) error {
+	if cronSpec == "" {
+		return errors.Join(ErrFailedToScheduleTask, ErrCronSpecIsEmpty)
+	}
+	if taskName == "" {
+		return errors.Join(ErrFailedToScheduleTask, ErrTaskNameIsEmpty)
+	}
+	if _, err := srv.asynq.Register(cronSpec, asynq.NewTask(taskName, nil)); err != nil {
+		return errors.Join(ErrFailedToScheduleTask, err)
+	}
+
+	return nil
 }
 
 // Run runs the scheduler with the provided handlers.
-// It registers each handler with the scheduler and then starts the scheduler.
 // It returns a function that can be used to run server in a error group.
 // E.g.:
 //
 //	eg, ctx := errgroup.WithContext(context.Background())
-//	eg.Go(schedulerServer.Run(
-//		NewSchedulerHandler1(),
-//		NewSchedulerHandler2(),
-//	))
-func (srv *SchedulerServer) Run(handlers ...ScheduledTaskHandler) func() error {
+//	eg.Go(schedulerServer.Run())
+func (srv *SchedulerServer) Run() func() error {
 	return func() error {
-		// Register handlers
-		for _, h := range handlers {
-			_, err := srv.asynq.Register(h.Schedule(), asynq.NewTask(h.TaskName(), nil))
-			if err != nil {
-				return errors.Join(ErrFailedToScheduleTask, err)
-			}
-		}
-
 		// Run scheduler
 		if err := srv.asynq.Run(); err != nil {
 			return errors.Join(ErrFailedToStartSchedulerServer, err)
@@ -76,16 +84,16 @@ func (srv *SchedulerServer) Shutdown() {
 //	eg.Go(asyncer.RunSchedulerServer(
 //		"redis://localhost:6379",
 //		logger,
-//		asyncer.ScheduledHandlerFunc[Payload]("@every 1h", "scheduled_task_1"),
+//		asyncer.NewTaskScheduler("@every 1h", "scheduled_task_1"),
 //	))
 
 //	eg.Go(asyncer.RunQueueServer(
 //		"redis://localhost:6379",
 //		logger,
-//		asyncer.HandlerFunc[Payload]("scheduled_task_1", scheduledTaskHandler),
+//		asyncer.ScheduledHandlerFunc("scheduled_task_1", scheduledTaskHandler),
 //	))
 //
-//	func scheduledTaskHandler(ctx context.Context, payload Payload) error {
+//	func scheduledTaskHandler(ctx context.Context) error {
 //		// ...handle task here...
 //	}
 //
@@ -93,11 +101,11 @@ func (srv *SchedulerServer) Shutdown() {
 // The function panics if the Redis connection string is invalid.
 //
 // !!! Pay attention, that the scheduler just triggers the job, so you need to run queue server as well.
-func RunSchedulerServer(redisConnStr string, log asynq.Logger, handlers ...ScheduledTaskHandler) func() error {
+func RunSchedulerServer(ctx context.Context, redisConnStr string, log asynq.Logger, schedulers ...TaskScheduler) func() error {
 	// Redis connect options for asynq client
 	redisConnOpt, err := asynq.ParseRedisURI(redisConnStr)
 	if err != nil {
-		panic(errors.Join(ErrFailedToRunQueueServer, err))
+		panic(errors.Join(ErrFailedToRunSchedulerServer, err))
 	}
 
 	// Init scheduler server
@@ -106,6 +114,20 @@ func RunSchedulerServer(redisConnStr string, log asynq.Logger, handlers ...Sched
 		opts = append(opts, WithSchedulerLogger(log))
 	}
 
-	// Init scheduler server
-	return NewSchedulerServer(redisConnOpt, opts...).Run(handlers...)
+	return func() error {
+		srv := NewSchedulerServer(redisConnOpt, opts...)
+		defer srv.Shutdown()
+
+		// Register schedulers
+		for _, scheduler := range schedulers {
+			if err := srv.ScheduleTask(scheduler.Schedule(), scheduler.TaskName()); err != nil {
+				return errors.Join(ErrFailedToRunSchedulerServer, err)
+			}
+		}
+
+		// Run server
+		eg, _ := errgroup.WithContext(ctx)
+		eg.Go(srv.Run())
+		return eg.Wait()
+	}
 }
