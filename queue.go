@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -116,7 +117,7 @@ func (srv *QueueServer) Shutdown() {
 //
 // The function panics if the redis connection string is invalid.
 // The function returns an error if the server fails to start.
-func RunQueueServer(redisConnStr string, log asynq.Logger, handlers ...TaskHandler) func() error {
+func RunQueueServer(ctx context.Context, redisConnStr string, log asynq.Logger, handlers ...TaskHandler) func() error {
 	// Redis connect options for asynq client
 	redisConnOpt, err := asynq.ParseRedisURI(redisConnStr)
 	if err != nil {
@@ -129,6 +130,13 @@ func RunQueueServer(redisConnStr string, log asynq.Logger, handlers ...TaskHandl
 		opts = append(opts, WithQueueLogger(log))
 	}
 
-	// Init queue server
-	return NewQueueServer(redisConnOpt, opts...).Run(handlers...)
+	return func() error {
+		srv := NewQueueServer(redisConnOpt, opts...)
+		defer srv.Shutdown()
+
+		// Run server
+		eg, _ := errgroup.WithContext(ctx)
+		eg.Go(srv.Run(handlers...))
+		return eg.Wait()
+	}
 }
