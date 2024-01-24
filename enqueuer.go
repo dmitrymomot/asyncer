@@ -71,7 +71,7 @@ func NewEnqueuer(redisConn string, opt ...EnqueuerOption) (*Enqueuer, error) {
 		return nil, errors.Join(ErrFailedToCreateEnqueuerWithClient, err)
 	}
 
-	return NewEnqueuerWithAsynqClient(client)
+	return NewEnqueuerWithAsynqClient(client, opt...)
 }
 
 // MustNewEnqueuer creates a new Enqueuer with the given Redis connection string and options.
