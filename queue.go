@@ -74,9 +74,14 @@ func (srv *QueueServer) Run(handlers ...TaskHandler) func() error {
 
 		// Register handlers
 		for _, h := range handlers {
-			mux.HandleFunc(h.TaskName(), func(ctx context.Context, t *asynq.Task) error {
-				return h.Handle(ctx, t.Payload())
-			})
+			handlerFunc := func(
+				fn func(ctx context.Context, payload []byte) error,
+			) func(ctx context.Context, t *asynq.Task) error {
+				return func(ctx context.Context, t *asynq.Task) error {
+					return fn(ctx, t.Payload())
+				}
+			}
+			mux.HandleFunc(h.TaskName(), handlerFunc(h.Handle))
 		}
 
 		// Run server
