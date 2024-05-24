@@ -1,8 +1,15 @@
-version: "3"
-
 services:
   redis:
     image: redis:alpine
     container_name: asyncer-redis-example
     ports:
       - 6379:6379
+
+  asyncmon:
+    platform: linux/x86_64
+    image: hibiken/asynqmon:latest
+    container_name: asyncer-asyncmon-example
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    ports:
+      - 8080:8080
