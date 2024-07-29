@@ -8,10 +8,10 @@ import (
 )
 
 type slogAdapter struct {
-	log slog.Logger
+	log *slog.Logger
 }
 
-func NewSlogAdapter(log slog.Logger) asynq.Logger {
+func NewSlogAdapter(log *slog.Logger) asynq.Logger {
 	return &slogAdapter{log: log}
 }
 
