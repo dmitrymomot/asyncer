@@ -130,7 +130,7 @@ func RunQueueServer(ctx context.Context, redisConnStr string, log asynq.Logger, 
 	}
 
 	// Queue server options
-	opts := []QueueServerOption{}
+	var opts []QueueServerOption
 	if log != nil {
 		opts = append(opts, WithQueueLogger(log))
 	}
