@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/dmitrymomot/asyncer"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/dmitrymomot/asyncer"
 )
 
 const (
@@ -47,7 +49,8 @@ func main() {
 
 	// Run a new queue server with redis as the broker.
 	eg.Go(asyncer.RunQueueServer(
-		ctx, redisAddr, nil,
+		ctx, redisAddr,
+		asyncer.NewSlogAdapter(slog.Default().With(slog.String("component", "queue-server"))),
 		// Register a handler for the task.
 		asyncer.HandlerFunc(TestTaskName, testTaskHandler),
 		asyncer.HandlerFunc(TestTaskName2, testTaskHandler2),
@@ -60,7 +63,12 @@ func main() {
 		asyncer.WithTaskDeadline(10*time.Minute),
 		asyncer.WithMaxRetry(0),
 	)
-	defer enqueuer.Close()
+	defer func(enqueuer *asyncer.Enqueuer) {
+		err := enqueuer.Close()
+		if err != nil {
+			slog.Error("Failed to close the enqueuer", "error", err)
+		}
+	}(enqueuer)
 
 	// Enqueue a task with payload.
 	// The task will be processed after immediately.
@@ -90,8 +98,9 @@ func main() {
 	// Listen for signals to cancel the context.
 	// This will stop the routine and close the queue server.
 	eg.Go(func() error {
-		c := make(chan os.Signal, 1)                    // Create channel to signify a signal being sent
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM) // When an interrupt or termination signal is sent, notify the channel
+		c := make(chan os.Signal, 1) // Create channel to signify a signal being sent
+		signal.Notify(c, os.Interrupt,
+			syscall.SIGTERM) // When an interrupt or termination signal is sent, notify the channel
 
 		select {
 		case <-c:

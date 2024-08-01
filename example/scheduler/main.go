@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dmitrymomot/asyncer"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/dmitrymomot/asyncer"
 )
 
 const (
@@ -14,12 +15,8 @@ const (
 	TestTaskName = "scheduled_task"
 )
 
-type TestTaskPayload struct {
-	Name string
-}
-
 // test task handler function
-func testTaskHandler(ctx context.Context) error {
+func testTaskHandler(_ context.Context) error {
 	fmt.Println("scheduled test task handler called at", time.Now().Format(time.RFC3339))
 	return nil
 }
