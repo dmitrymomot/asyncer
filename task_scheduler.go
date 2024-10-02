@@ -46,7 +46,7 @@ func (h *scheduledTaskWrapper) Schedule() string {
 
 // Handle is a method that handles the task scheduler wrapper.
 // It takes a context.Context as input and returns an error.
-func (h *scheduledTaskWrapper) Handle(ctx context.Context, payload []byte) error {
+func (h *scheduledTaskWrapper) Handle(ctx context.Context, _ []byte) error {
 	return h.fn(ctx)
 }
 
