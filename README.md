@@ -107,8 +107,9 @@ import (
 )
 
 const (
-	redisAddr    = "redis://localhost:6379/0"
-	TestTaskName = "scheduled_task"
+	redisAddr     = "redis://localhost:6379/0"
+	TestTaskName  = "scheduled_task"
+	TestTaskName2 = "scheduled_task_2"
 )
 
 type TestTaskPayload struct {
@@ -129,6 +130,7 @@ func main() {
 		ctx, redisAddr, nil,
 		// Register a handler for the task.
 		asyncer.ScheduledHandlerFunc(TestTaskName, testTaskHandler),
+		asyncer.ScheduledHandlerFunc(TestTaskName2, testTaskHandler),
 		// ... add more handlers here ...
 	))
 
@@ -138,6 +140,15 @@ func main() {
 		ctx, redisAddr, nil,
 		// Schedule the scheduled_task task to be enqueued every 1 seconds.
 		asyncer.NewTaskScheduler("@every 1s", TestTaskName),
+		// Schedule the scheduled_task_2 task to be enqueued every 5 seconds.
+		// The task will be enqueued only if there is no existing task with the same name in the queue.
+		// The task will not be retried if it fails.
+        // The task will be considered as timed out if it takes more than 5 seconds to process.
+		asyncer.NewTaskScheduler("@every 5s", TestTaskName2,
+			asyncer.MaxRetry(0),
+			asyncer.Timeout(5*time.Second),
+			asyncer.Unique(5*time.Second),
+		),
 		// ... add more scheduled tasks here ...
 	))
 
