@@ -89,20 +89,26 @@ func MustNewEnqueuer(redisConn string, opt ...EnqueuerOption) *Enqueuer {
 // It takes a context and a task as parameters.
 // The task is enqueued with the specified queue name, deadline, maximum retry count, and uniqueness constraint.
 // Returns an error if the task fails to enqueue.
-func (e *Enqueuer) EnqueueTask(ctx context.Context, taskName string, payload any) error {
+func (e *Enqueuer) EnqueueTask(ctx context.Context, taskName string, payload any, opts ...TaskOption) error {
 	// Marshal payload to JSON bytes
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return errors.Join(ErrFailedToEnqueueTask, err)
 	}
 
-	// Enqueue task
-	if _, err := e.client.Enqueue(
-		asynq.NewTask(taskName, jsonPayload),
+	// Set default options for enqueuing task.
+	// These options can be overridden by the user provided options.
+	defaultOptions := []asynq.Option{
 		asynq.Queue(e.queueName),
 		asynq.Deadline(time.Now().Add(e.taskDeadline)),
 		asynq.MaxRetry(e.maxRetry),
 		asynq.Unique(e.taskDeadline),
+	}
+
+	// Enqueue task
+	if _, err := e.client.Enqueue(
+		asynq.NewTask(taskName, jsonPayload),
+		append(defaultOptions, opts...)...,
 	); err != nil {
 		return errors.Join(ErrFailedToEnqueueTask, err)
 	}

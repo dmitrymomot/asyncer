@@ -1,6 +1,10 @@
 package asyncer
 
-import "context"
+import (
+	"context"
+
+	"github.com/hibiken/asynq"
+)
 
 type (
 
@@ -12,6 +16,8 @@ type (
 		// Schedule returns the cron spec for the task.
 		// For more information about cron spec, see https://pkg.go.dev/github.com/robfig/cron/v3#hdr-CRON_Expression_Format.
 		Schedule() string
+		// Options returns the options for the task scheduler.
+		Options() []TaskOption
 	}
 
 	// scheduledHandlerFunc is a function that handles a scheduled task.
@@ -23,6 +29,7 @@ type (
 		cronSpec string
 		name     string
 		fn       scheduledHandlerFunc
+		opts     []asynq.Option
 	}
 )
 
@@ -43,9 +50,14 @@ func (h *scheduledTaskWrapper) Handle(ctx context.Context, payload []byte) error
 	return h.fn(ctx)
 }
 
+// Options returns the options for the task handler.
+func (h *scheduledTaskWrapper) Options() []asynq.Option {
+	return h.opts
+}
+
 // NewTaskScheduler creates a new task scheduler with the given cron spec and name.
-func NewTaskScheduler(cronSpec, name string) TaskScheduler {
-	return &scheduledTaskWrapper{cronSpec: cronSpec, name: name}
+func NewTaskScheduler(cronSpec, name string, opts ...TaskOption) TaskScheduler {
+	return &scheduledTaskWrapper{cronSpec: cronSpec, name: name, opts: opts}
 }
 
 // ScheduledHandlerFunc is a function that creates a TaskHandler for a scheduled task.

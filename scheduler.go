@@ -39,14 +39,15 @@ func NewSchedulerServer(redisConnOpt asynq.RedisConnOpt, opts ...SchedulerServer
 
 // ScheduleTask schedules a task based on the given cron specification and task name.
 // It returns an error if the cron specification or task name is empty, or if there was an error registering the task.
-func (srv *SchedulerServer) ScheduleTask(cronSpec, taskName string) error {
+func (srv *SchedulerServer) ScheduleTask(cronSpec, taskName string, opts ...TaskOption) error {
 	if cronSpec == "" {
 		return errors.Join(ErrFailedToScheduleTask, ErrCronSpecIsEmpty)
 	}
 	if taskName == "" {
 		return errors.Join(ErrFailedToScheduleTask, ErrTaskNameIsEmpty)
 	}
-	if _, err := srv.asynq.Register(cronSpec, asynq.NewTask(taskName, nil)); err != nil {
+
+	if _, err := srv.asynq.Register(cronSpec, asynq.NewTask(taskName, nil, opts...)); err != nil {
 		return errors.Join(ErrFailedToScheduleTask, err)
 	}
 
@@ -109,7 +110,7 @@ func RunSchedulerServer(ctx context.Context, redisConnStr string, log asynq.Logg
 	}
 
 	// Init scheduler server
-	opts := []SchedulerServerOption{}
+	var opts []SchedulerServerOption
 	if log != nil {
 		opts = append(opts, WithSchedulerLogger(log))
 	}
@@ -120,7 +121,7 @@ func RunSchedulerServer(ctx context.Context, redisConnStr string, log asynq.Logg
 
 		// Register schedulers
 		for _, scheduler := range schedulers {
-			if err := srv.ScheduleTask(scheduler.Schedule(), scheduler.TaskName()); err != nil {
+			if err := srv.ScheduleTask(scheduler.Schedule(), scheduler.TaskName(), scheduler.Options()...); err != nil {
 				return errors.Join(ErrFailedToRunSchedulerServer, err)
 			}
 		}

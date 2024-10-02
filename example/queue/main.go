@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	redisAddr     = "redis://localhost:6379/0"
+	redisAddr     = "redis://localhost:63791/0"
 	TestTaskName  = "queued_task"
 	TestTaskName2 = "queued_task_2"
 )

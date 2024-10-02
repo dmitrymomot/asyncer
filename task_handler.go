@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
+	"github.com/hibiken/asynq"
 )
 
 type (
@@ -14,6 +16,8 @@ type (
 		TaskName() string
 		// Handle handles the task. It takes a context and a payload as parameters.
 		Handle(ctx context.Context, payload []byte) error
+		// Options returns the options for the task handler.
+		Options() []asynq.Option
 	}
 
 	// handlerFunc is a function that handles a task.
@@ -28,6 +32,7 @@ type (
 		cronSpec string
 		name     string
 		fn       handlerFunc[Payload]
+		opts     []TaskOption
 	}
 )
 
@@ -57,14 +62,20 @@ func (h *handlerFuncWrapper[Payload]) Handle(ctx context.Context, payload []byte
 	return h.fn(ctx, p)
 }
 
+// Options returns the options for the handler function.
+func (h *handlerFuncWrapper[Payload]) Options() []asynq.Option {
+	return h.opts
+}
+
 // HandlerFunc is a function that creates a TaskHandler for handling tasks of a specific payload type.
 // It takes a name string and a handler function as parameters and returns a TaskHandler.
 // The name parameter represents the name of the handler, while the fn parameter is the actual handler function.
 // The TaskHandler returned by HandlerFunc is responsible for executing the handler function when a task of the specified payload type is received.
 // The payload type is specified using the generic type parameter Payload.
-func HandlerFunc[Payload any](name string, fn handlerFunc[Payload]) TaskHandler {
+func HandlerFunc[Payload any](name string, fn handlerFunc[Payload], opts ...TaskOption) TaskHandler {
 	return &handlerFuncWrapper[Payload]{
 		name: name,
 		fn:   fn,
+		opts: opts,
 	}
 }
