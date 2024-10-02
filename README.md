@@ -4,7 +4,6 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/dmitrymomot/asyncer.svg)](https://pkg.go.dev/github.com/dmitrymomot/asyncer)
 [![License](https://img.shields.io/github/license/dmitrymomot/asyncer)](https://github.com/dmitrymomot/asyncer/blob/main/LICENSE)
 
-
 [![Tests](https://github.com/dmitrymomot/asyncer/actions/workflows/tests.yml/badge.svg)](https://github.com/dmitrymomot/asyncer/actions/workflows/tests.yml)
 [![CodeQL Analysis](https://github.com/dmitrymomot/asyncer/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/dmitrymomot/asyncer/actions/workflows/codeql-analysis.yml)
 [![GolangCI Lint](https://github.com/dmitrymomot/asyncer/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/dmitrymomot/asyncer/actions/workflows/golangci-lint.yml)
@@ -143,7 +142,7 @@ func main() {
 		// Schedule the scheduled_task_2 task to be enqueued every 5 seconds.
 		// The task will be enqueued only if there is no existing task with the same name in the queue.
 		// The task will not be retried if it fails.
-        // The task will be considered as timed out if it takes more than 5 seconds to process.
+		// The task will be considered as timed out if it takes more than 5 seconds to process.
 		asyncer.NewTaskScheduler("@every 5s", TestTaskName2,
 			asyncer.MaxRetry(0),
 			asyncer.Timeout(5*time.Second),
