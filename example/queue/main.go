@@ -10,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/dmitrymomot/asyncer"
+	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
-	redisAddr     = "redis://localhost:63791/0"
+	redisAddr     = "localhost:63791"
 	TestTaskName  = "queued_task"
 	TestTaskName2 = "queued_task_2"
 )
@@ -47,9 +47,16 @@ func main() {
 
 	eg, _ := errgroup.WithContext(ctx)
 
+	// Create Redis client
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+		DB:   0,
+	})
+	defer redisClient.Close()
+
 	// Run a new queue server with redis as the broker.
 	eg.Go(asyncer.RunQueueServer(
-		ctx, redisAddr,
+		ctx, redisClient,
 		asyncer.NewSlogAdapter(slog.Default().With(slog.String("component", "queue-server"))),
 		// Register a handler for the task.
 		asyncer.HandlerFunc(TestTaskName, testTaskHandler),
@@ -59,19 +66,13 @@ func main() {
 
 	// Create a new enqueuer with redis as the broker.
 	enqueuer := asyncer.MustNewEnqueuer(
-		redisAddr,
+		redisClient,
 		asyncer.WithTaskDeadline(10*time.Minute),
 		asyncer.WithMaxRetry(0),
 	)
-	defer func(enqueuer *asyncer.Enqueuer) {
-		err := enqueuer.Close()
-		if err != nil {
-			slog.Error("Failed to close the enqueuer", "error", err)
-		}
-	}(enqueuer)
+	defer enqueuer.Close()
 
-	// Enqueue a task with payload.
-	// The task will be processed after immediately.
+	// Enqueue tasks
 	eg.Go(func() error {
 		var i int
 		ticker := time.NewTicker(1 * time.Second)
@@ -95,26 +96,21 @@ func main() {
 		}
 	})
 
-	// Listen for signals to cancel the context.
-	// This will stop the routine and close the queue server.
+	// Listen for signals
 	eg.Go(func() error {
-		c := make(chan os.Signal, 1) // Create channel to signify a signal being sent
-		signal.Notify(c, os.Interrupt,
-			syscall.SIGTERM) // When an interrupt or termination signal is sent, notify the channel
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 		select {
 		case <-c:
 			log.Println("Shutting down...")
-			// Cancel the context
 			cancel()
-
 			return nil
 		case <-ctx.Done():
 			return nil
 		}
 	})
 
-	// Wait for the queue server to exit.
 	if err := eg.Wait(); err != nil {
 		panic(err)
 	}

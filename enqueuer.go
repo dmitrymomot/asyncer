@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 )
 
 type (
@@ -65,8 +66,8 @@ func MustNewEnqueuerWithAsynqClient(client *asynq.Client, opt ...EnqueuerOption)
 // NewEnqueuer creates a new Enqueuer with the given Redis connection string and options.
 // Default values are used if no option is provided.
 // It returns a pointer to the Enqueuer and an error if there was a problem creating the Enqueuer.
-func NewEnqueuer(redisConn string, opt ...EnqueuerOption) (*Enqueuer, error) {
-	client, _, err := NewClient(redisConn)
+func NewEnqueuer(redisClient redis.UniversalClient, opt ...EnqueuerOption) (*Enqueuer, error) {
+	client, err := NewClient(redisClient)
 	if err != nil {
 		return nil, errors.Join(ErrFailedToCreateEnqueuerWithClient, err)
 	}
@@ -76,8 +77,8 @@ func NewEnqueuer(redisConn string, opt ...EnqueuerOption) (*Enqueuer, error) {
 
 // MustNewEnqueuer creates a new Enqueuer with the given Redis connection string and options.
 // It panics if an error occurs during the creation of the Enqueuer.
-func MustNewEnqueuer(redisConn string, opt ...EnqueuerOption) *Enqueuer {
-	e, err := NewEnqueuer(redisConn, opt...)
+func MustNewEnqueuer(redisClient redis.UniversalClient, opt ...EnqueuerOption) *Enqueuer {
+	e, err := NewEnqueuer(redisClient, opt...)
 	if err != nil {
 		panic(err)
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -20,7 +21,7 @@ type (
 )
 
 // NewSchedulerServer creates a new scheduler client and returns the server.
-func NewSchedulerServer(redisConnOpt asynq.RedisConnOpt, opts ...SchedulerServerOption) *SchedulerServer {
+func NewSchedulerServer(redisClient redis.UniversalClient, opts ...SchedulerServerOption) *SchedulerServer {
 	// setup asynq scheduler config
 	cnf := &asynq.SchedulerOpts{
 		LogLevel: asynq.ErrorLevel,
@@ -33,7 +34,7 @@ func NewSchedulerServer(redisConnOpt asynq.RedisConnOpt, opts ...SchedulerServer
 	}
 
 	return &SchedulerServer{
-		asynq: asynq.NewScheduler(redisConnOpt, cnf),
+		asynq: asynq.NewSchedulerFromRedisClient(redisClient, cnf),
 	}
 }
 
@@ -102,13 +103,7 @@ func (srv *SchedulerServer) Shutdown() {
 // The function panics if the Redis connection string is invalid.
 //
 // !!! Pay attention, that the scheduler just triggers the job, so you need to run queue server as well.
-func RunSchedulerServer(ctx context.Context, redisConnStr string, log asynq.Logger, schedulers ...TaskScheduler) func() error {
-	// Redis connect options for asynq client
-	redisConnOpt, err := asynq.ParseRedisURI(redisConnStr)
-	if err != nil {
-		panic(errors.Join(ErrFailedToRunSchedulerServer, err))
-	}
-
+func RunSchedulerServer(ctx context.Context, redisClient redis.UniversalClient, log asynq.Logger, schedulers ...TaskScheduler) func() error {
 	// Init scheduler server
 	var opts []SchedulerServerOption
 	if log != nil {
@@ -116,7 +111,7 @@ func RunSchedulerServer(ctx context.Context, redisConnStr string, log asynq.Logg
 	}
 
 	return func() error {
-		srv := NewSchedulerServer(redisConnOpt, opts...)
+		srv := NewSchedulerServer(redisClient, opts...)
 		defer srv.Shutdown()
 
 		// Register schedulers

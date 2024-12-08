@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -23,7 +24,7 @@ type (
 // NewQueueServer creates a new instance of QueueServer.
 // It takes a redis connection option and optional queue server options.
 // The function returns a pointer to the created QueueServer.
-func NewQueueServer(redisConnOpt asynq.RedisConnOpt, opts ...QueueServerOption) *QueueServer {
+func NewQueueServer(redisClient redis.UniversalClient, opts ...QueueServerOption) *QueueServer {
 	// Get the number of available CPUs.
 	useProcs := runtime.GOMAXPROCS(0)
 	if useProcs == 0 {
@@ -54,7 +55,7 @@ func NewQueueServer(redisConnOpt asynq.RedisConnOpt, opts ...QueueServerOption) 
 		opt(&cnf)
 	}
 
-	return &QueueServer{asynq: asynq.NewServer(redisConnOpt, cnf)}
+	return &QueueServer{asynq: asynq.NewServerFromRedisClient(redisClient, cnf)}
 }
 
 // Run starts the queue server and registers the provided task handlers.
@@ -122,13 +123,7 @@ func (srv *QueueServer) Shutdown() {
 //
 // The function panics if the redis connection string is invalid.
 // The function returns an error if the server fails to start.
-func RunQueueServer(ctx context.Context, redisConnStr string, log asynq.Logger, handlers ...TaskHandler) func() error {
-	// Redis connect options for asynq client
-	redisConnOpt, err := asynq.ParseRedisURI(redisConnStr)
-	if err != nil {
-		panic(errors.Join(ErrFailedToRunQueueServer, err))
-	}
-
+func RunQueueServer(ctx context.Context, redisClient redis.UniversalClient, log asynq.Logger, handlers ...TaskHandler) func() error {
 	// Queue server options
 	var opts []QueueServerOption
 	if log != nil {
@@ -136,7 +131,7 @@ func RunQueueServer(ctx context.Context, redisConnStr string, log asynq.Logger, 
 	}
 
 	return func() error {
-		srv := NewQueueServer(redisConnOpt, opts...)
+		srv := NewQueueServer(redisClient, opts...)
 		defer srv.Shutdown()
 
 		// Run server
