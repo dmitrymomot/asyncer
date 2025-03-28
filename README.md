@@ -9,14 +9,23 @@
 [![GolangCI Lint](https://github.com/dmitrymomot/asyncer/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/dmitrymomot/asyncer/actions/workflows/golangci-lint.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dmitrymomot/asyncer)](https://goreportcard.com/report/github.com/dmitrymomot/asyncer)
 
-A type-safe distributed task queue in Go, built on top of [hibiken/asynq](https://github.com/hibiken/asynq).
+A type-safe distributed task queue in Go, built on top of [hibiken/asynq](https://github.com/hibiken/asynq) using Redis.
 
 ## Key Features
 
-- Type-safe task handlers
-- Support for immediate and scheduled tasks
-- Redis-based task queue
-- Built-in monitoring UI
+- **Type-safety**: Strongly-typed task handlers and payloads
+- **Distributed**: Redis-based task queue for distributed processing
+- **Flexible**: Support for immediate and scheduled tasks
+- **Configurable**: Extensive options for tasks, queues, and scheduling
+- **Monitoring**: Built-in monitoring UI (provided by asynq)
+- **Logging**: Integration with Go's standard `slog` package
+- **Robust**: Task retries, timeouts, and error handling
+- **Performance**: Efficient parallelism based on available CPU cores
+
+## Requirements
+
+- Go 1.23.0 or higher (using toolchain go1.24.1)
+- Redis server
 
 ## Installation
 
@@ -25,6 +34,108 @@ go get github.com/dmitrymomot/asyncer
 ```
 
 ## Usage Examples
+
+### Basic Queue Setup
+
+Here's a simple example of setting up a queue server and enqueuing tasks:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log/slog"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
+
+    "github.com/dmitrymomot/asyncer"
+    "github.com/redis/go-redis/v9"
+    "golang.org/x/sync/errgroup"
+)
+
+// Define task types and payloads
+const (
+    WelcomeEmailTask = "email:welcome"
+)
+
+type WelcomeEmailPayload struct {
+    UserID    int64  `json:"user_id"`
+    Email     string `json:"email"`
+    FirstName string `json:"first_name"`
+}
+
+// Define task handler
+func welcomeEmailHandler(ctx context.Context, payload WelcomeEmailPayload) error {
+    fmt.Printf("Sending welcome email to %s (%s)\n", payload.FirstName, payload.Email)
+    // Implement email sending logic here
+    return nil
+}
+
+func main() {
+    // Setup context with cancellation
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    // Create error group
+    eg, _ := errgroup.WithContext(ctx)
+
+    // Connect to Redis
+    redisClient := redis.NewClient(&redis.Options{
+        Addr: "localhost:6379",
+        DB:   0,
+    })
+    defer redisClient.Close()
+
+    // Create task enqueuer
+    enqueuer := asyncer.MustNewEnqueuer(
+        redisClient,
+        asyncer.WithQueueNameEnq("default"),
+        asyncer.WithTaskDeadline(5 * time.Minute),
+        asyncer.WithMaxRetry(3),
+    )
+    defer enqueuer.Close()
+
+    // Run queue server
+    eg.Go(asyncer.RunQueueServer(
+        ctx, 
+        redisClient,
+        asyncer.NewSlogAdapter(slog.Default().With(slog.String("component", "queue-server"))),
+        // Register task handlers
+        asyncer.HandlerFunc(WelcomeEmailTask, welcomeEmailHandler),
+    ))
+
+    // Enqueue a task
+    if err := enqueuer.EnqueueTask(
+        ctx, 
+        WelcomeEmailTask, 
+        WelcomeEmailPayload{
+            UserID:    123,
+            Email:     "user@example.com",
+            FirstName: "John",
+        },
+    ); err != nil {
+        fmt.Printf("Failed to enqueue task: %v\n", err)
+    }
+
+    // Handle graceful shutdown
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+    select {
+    case <-quit:
+        fmt.Println("Shutting down...")
+        cancel()
+    case <-ctx.Done():
+    }
+
+    if err := eg.Wait(); err != nil {
+        fmt.Printf("Error: %v\n", err)
+    }
+}
+```
 
 ### Email Service Example
 
@@ -46,7 +157,7 @@ import (
 const (
     WelcomeEmailTask     = "email:welcome"
     PasswordResetTask    = "email:password_reset"
-    WeeklyDigestTask    = "email:weekly_digest"
+    WeeklyDigestTask     = "email:weekly_digest"
 )
 
 // Task payloads
@@ -78,7 +189,12 @@ type EmailService struct {
 // NewEmailService creates a new email service
 func NewEmailService(redis *redis.Client) *EmailService {
     return &EmailService{
-        enqueuer: asyncer.MustNewEnqueuer(redis),
+        enqueuer: asyncer.MustNewEnqueuer(
+            redis,
+            asyncer.WithQueueNameEnq("default"),
+            asyncer.WithTaskDeadline(5 * time.Minute),
+            asyncer.WithMaxRetry(3),
+        ),
     }
 }
 
@@ -193,136 +309,166 @@ func StartWorker(ctx context.Context, redis *redis.Client, worker *EmailWorker) 
 }
 ```
 
-### Usage in Application
+### Scheduled Tasks
 
-Example of using the email service in your application:
+For scheduled tasks, you can use the scheduler server:
 
 ```go
 package main
 
 import (
     "context"
+    "fmt"
+    "log/slog"
+    "os"
+    "os/signal"
+    "syscall"
 
-    "your/app/email"
-    "your/app/worker"
+    "github.com/dmitrymomot/asyncer"
+    "github.com/redis/go-redis/v9"
+    "golang.org/x/sync/errgroup"
 )
 
+const (
+    DailyReportTask = "report:daily"
+)
+
+// No payload needed for this scheduled task
+func generateDailyReport(ctx context.Context, struct{}) error {
+    fmt.Println("Generating daily report...")
+    // Implementation of report generation
+    return nil
+}
+
 func main() {
-    // Initialize your Redis client and other dependencies
-    redisClient := initRedis()
-    mailerService := initMailer()
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
 
-    // Initialize email service for enqueueing tasks
-    emailService := email.NewEmailService(redisClient)
+    eg, _ := errgroup.WithContext(ctx)
 
-    // Start the worker in a separate goroutine
-    go func() {
-        emailWorker := worker.NewEmailWorker(mailerService)
-        if err := worker.StartWorker(context.Background(), redisClient, emailWorker); err != nil {
-            log.Fatal(err)
-        }
-    }()
+    // Connect to Redis
+    redisClient := redis.NewClient(&redis.Options{
+        Addr: "localhost:6379",
+        DB:   0,
+    })
+    defer redisClient.Close()
 
-    // Use the email service in your application
-    if err := emailService.SendWelcomeEmail(
-        context.Background(),
-        123,
-        "user@example.com",
-        "John",
-    ); err != nil {
-        log.Printf("Failed to send welcome email: %v", err)
+    // Configure logger
+    logger := asyncer.NewSlogAdapter(slog.Default().With(
+        slog.String("component", "scheduler-server"),
+    ))
+
+    // Run scheduler server - schedules tasks to run
+    eg.Go(asyncer.RunSchedulerServer(
+        ctx,
+        redisClient,
+        logger,
+        // Schedule daily report at midnight
+        asyncer.NewTaskScheduler("0 0 * * *", DailyReportTask),
+    ))
+
+    // Run queue server - processes the scheduled tasks
+    eg.Go(asyncer.RunQueueServer(
+        ctx,
+        redisClient,
+        logger,
+        // Register handler for the scheduled task
+        asyncer.HandlerFunc(DailyReportTask, generateDailyReport),
+    ))
+
+    // Handle graceful shutdown
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+    select {
+    case <-quit:
+        fmt.Println("Shutting down...")
+        cancel()
+    case <-ctx.Done():
+    }
+
+    if err := eg.Wait(); err != nil {
+        fmt.Printf("Error: %v\n", err)
     }
 }
 ```
 
-### Scheduled Tasks Example
+## Advanced Configuration
 
-Example of setting up recurring notifications:
+### Queue Options
 
 ```go
-package notifications
-
-import (
-    "context"
-    "time"
-
-    "github.com/dmitrymomot/asyncer"
-    "github.com/redis/go-redis/v9"
+// Configure queue server
+queueServer := asyncer.NewQueueServer(
+    redisClient,
+    // Set worker concurrency
+    asyncer.WithQueueConcurrency(10),
+    // Set queue priority (higher number = higher priority)
+    asyncer.WithQueue("critical", 10),
+    asyncer.WithQueue("default", 5),
+    asyncer.WithQueue("low", 1),
+    // Set worker shutdown timeout
+    asyncer.WithQueueShutdownTimeout(30 * time.Second),
+    // Set logger
+    asyncer.WithQueueLogger(customLogger),
 )
-
-const DigestSchedulerTask = "scheduler:weekly_digest"
-
-// StartScheduler initializes the task scheduler
-func StartScheduler(ctx context.Context, redis *redis.Client) error {
-    return asyncer.RunSchedulerServer(
-        ctx,
-        redis,
-        nil, // default logger
-        // Schedule weekly digest every Monday at 9 AM
-        asyncer.NewTaskScheduler(
-            "0 9 * * 1", // cron expression
-            DigestSchedulerTask,
-            asyncer.Unique(24*time.Hour), // prevent duplicate runs
-        ),
-    )
-}
 ```
 
-## Configuration
-
-### Enqueuer Options
-
-| Option                              | Description                      |
-| ----------------------------------- | -------------------------------- |
-| `WithTaskDeadline(d time.Duration)` | Sets maximum task execution time |
-| `WithMaxRetry(n int)`               | Sets maximum retry attempts      |
-| `WithQueue(name string)`            | Specifies queue name             |
-| `WithRetention(d time.Duration)`    | Sets task retention period       |
+### Task Options when Initializing Enqueuer
 
 ```go
-// Enqueue with options
-enqueuer.EnqueueTask(
-    ctx,
-    taskName,
-    payload,
+// Configure task options when initializing the Enqueuer
+enqueuer := asyncer.MustNewEnqueuer(
+    redisClient,
+    asyncer.WithQueueNameEnq("default"),
+    asyncer.WithTaskDeadline(5 * time.Minute),
     asyncer.WithMaxRetry(3),
-    asyncer.WithQueue("high"),
-    asyncer.WithTaskDeadline(5*time.Minute),
+)
+```
+
+### Task Options when Enqueuing
+
+You can also specify options when enqueuing a task:
+
+```go
+// Configure task options when enqueuing
+err := enqueuer.EnqueueTask(
+    ctx,
+    "task:name",
+    payload,
+    // Set task queue
+    asynq.Queue("critical"),
+    // Set task processing timeout
+    asyncer.Timeout(5 * time.Minute),
+    // Schedule task for future execution
+    asyncer.ProcessIn(24 * time.Hour),
+    // Set retries
+    asyncer.MaxRetry(5),
+    // Prevent duplicate tasks
+    asyncer.Unique(1 * time.Hour),
+    // Set task ID
+    asyncer.TaskID("unique-task-id"),
+    // Set task group
+    asyncer.Group("email-notifications"),
+    // Set task deadline
+    asyncer.Deadline(time.Now().Add(6 * time.Hour)),
 )
 ```
 
 ### Scheduler Options
 
-| Option                     | Description                              |
-| -------------------------- | ---------------------------------------- |
-| `MaxRetry(n int)`          | Sets retry attempts for scheduled tasks  |
-| `Timeout(d time.Duration)` | Sets task timeout                        |
-| `Unique(d time.Duration)`  | Prevents duplicate tasks within duration |
-| `Queue(name string)`       | Specifies queue for scheduled tasks      |
-
 ```go
-// Schedule with options
-asyncer.NewTaskScheduler(
-    "*/30 * * * *", // every 30 minutes
-    taskName,
-    asyncer.MaxRetry(3),
-    asyncer.Timeout(1*time.Minute),
-    asyncer.Queue("scheduled"),
+// Configure scheduler server
+schedulerServer := asyncer.NewSchedulerServer(
+    redisClient,
+    // Set timezone
+    asyncer.WithSchedulerLocation("UTC"),
+    // Set logger
+    asyncer.WithSchedulerLogger(customLogger),
 )
 ```
 
-## Monitoring
-
-### Asynqmon Web Interface
-
-Access the monitoring dashboard at `http://localhost:8181` to:
-
-- View active, pending, and completed tasks
-- Monitor queue statistics
-- Inspect task details and errors
-- Manage task queues
-
-### Logging
+## Logging
 
 The package supports structured logging through the standard `slog` package:
 
@@ -332,16 +478,16 @@ asyncer.NewSlogAdapter(slog.Default().With(
 ))
 ```
 
-## Contributing
+## Monitor UI
 
-Contributions to the `asyncer` package are welcome! Here are some ways you can contribute:
+Asynq provides a web UI for monitoring tasks. You can run it with:
 
-- Reporting bugs
-- **Covering code with tests**
-- Suggesting enhancements
-- Submitting pull requests
-- Sharing the love by telling others about this project
+```go
+asynqmon.New(asynqmon.Options{
+    RedisConnOpt: asynq.RedisClientOpt{Addr: "localhost:6379"},
+}).Run(":8080")
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/dmitrymomot/asyncer/tree/main/LICENSE) file for details. This project contains some code from [hibiken/asynq](https://github.com/hibiken/asynq) package, which is also licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/dmitrymomot/asyncer/tree/main/LICENSE) file for details. This project is built on top of the [hibiken/asynq](https://github.com/hibiken/asynq) package - please refer to their [license](https://github.com/hibiken/asynq/blob/master/LICENSE) for more information.
