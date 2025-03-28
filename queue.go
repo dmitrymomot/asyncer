@@ -11,6 +11,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Default queue options.
+// It must be global to keep consistency with the enqueuer.go file.
+var (
+	workerConcurrency     = 1                // Default worker concurrency
+	workerShutdownTimeout = time.Second * 10 // Default worker shutdown timeout
+	workerLogLevel        = "info"           // Default worker log level
+	queueName             = "default"        // Default queue name
+	queuePriority         = 1                // Default queue priority
+)
+
 type (
 	// QueueServer is a wrapper for asynq.Server.
 	QueueServer struct {
@@ -26,6 +36,7 @@ type (
 // The function returns a pointer to the created QueueServer.
 func NewQueueServer(redisClient redis.UniversalClient, opts ...QueueServerOption) *QueueServer {
 	// Get the number of available CPUs.
+	// Use half of the CPUs for the worker concurrency.
 	useProcs := runtime.GOMAXPROCS(0)
 	if useProcs == 0 {
 		useProcs = 1
@@ -33,20 +44,17 @@ func NewQueueServer(redisClient redis.UniversalClient, opts ...QueueServerOption
 		useProcs = useProcs / 2
 	}
 
-	// Default queue options
-	var (
-		workerConcurrency     = useProcs // use half of the available CPUs
-		workerShutdownTimeout = time.Second * 10
-		workerLogLevel        = "info"
-		queueName             = "default"
-	)
+	// Default worker concurrency
+	workerConcurrency = useProcs
 
+	// Init default queue server config.
+	// It can be changed by the options.
 	cnf := asynq.Config{
 		Concurrency:     workerConcurrency,
 		LogLevel:        castToAsynqLogLevel(workerLogLevel),
 		ShutdownTimeout: workerShutdownTimeout,
 		Queues: map[string]int{
-			queueName: workerConcurrency,
+			queueName: queuePriority,
 		},
 	}
 

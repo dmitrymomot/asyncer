@@ -51,11 +51,37 @@ func Unique(ttl time.Duration) TaskOption {
 // Use this option to enqueue a task with a specific ID to prevent duplicate tasks.
 // If a task with the same ID already exists in the queue, it will be replaced by the new task.
 func TaskID(id string) TaskOption {
-	return asynq.TaskID(id)
+	if id != "" {
+		return asynq.TaskID(id)
+	}
+	return nil
 }
 
 // Group returns an option to specify the group used for the task.
 // Tasks in a given queue with the same group will be aggregated into one task before passed to Handler.
 func Group(g string) TaskOption {
-	return asynq.Group(g)
+	if g != "" {
+		return asynq.Group(g)
+	}
+	return nil
+}
+
+// ProcessAt returns an option to specify when to process the given task.
+//
+// If there's a conflicting ProcessIn option, the last option passed to Enqueue overrides the others.
+func ProcessAt(t time.Time) TaskOption {
+	if t.IsZero() || t.Before(time.Now()) {
+		t = time.Now().Add(time.Second)
+	}
+	return asynq.ProcessAt(t)
+}
+
+// ProcessIn returns an option to specify when to process the given task relative to the current time.
+//
+// If there's a conflicting ProcessAt option, the last option passed to Enqueue overrides the others.
+func ProcessIn(d time.Duration) TaskOption {
+	if d <= 0 {
+		d = time.Second
+	}
+	return asynq.ProcessIn(d)
 }

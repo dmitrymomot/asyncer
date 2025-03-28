@@ -17,7 +17,7 @@ func NewSlogAdapter(log *slog.Logger) asynq.Logger {
 }
 
 // Debug logs a message at Debug level.
-func (s *slogAdapter) Debug(args ...interface{}) {
+func (s *slogAdapter) Debug(args ...any) {
 	if len(args) == 0 {
 		return
 	}
@@ -27,7 +27,7 @@ func (s *slogAdapter) Debug(args ...interface{}) {
 	// If there is only one argument, it is the message.
 	if len(args) == 1 {
 		msg = fmt.Sprint(args[0])
-		args = make([]interface{}, 0)
+		args = make([]any, 0)
 	}
 
 	// If there are more than one argument, the first one is the message.
@@ -40,7 +40,7 @@ func (s *slogAdapter) Debug(args ...interface{}) {
 }
 
 // Info logs a message at Info level.
-func (s *slogAdapter) Info(args ...interface{}) {
+func (s *slogAdapter) Info(args ...any) {
 	if len(args) == 0 {
 		return
 	}
@@ -50,7 +50,7 @@ func (s *slogAdapter) Info(args ...interface{}) {
 	// If there is only one argument, it is the message.
 	if len(args) == 1 {
 		msg = fmt.Sprint(args[0])
-		args = make([]interface{}, 0)
+		args = make([]any, 0)
 	}
 
 	// If there are more than one argument, the first one is the message.
@@ -63,7 +63,7 @@ func (s *slogAdapter) Info(args ...interface{}) {
 }
 
 // Warn logs a message at Warning level.
-func (s *slogAdapter) Warn(args ...interface{}) {
+func (s *slogAdapter) Warn(args ...any) {
 	if len(args) == 0 {
 		return
 	}
@@ -73,7 +73,7 @@ func (s *slogAdapter) Warn(args ...interface{}) {
 	// If there is only one argument, it is the message.
 	if len(args) == 1 {
 		msg = fmt.Sprint(args[0])
-		args = make([]interface{}, 0)
+		args = make([]any, 0)
 	}
 
 	// If there are more than one argument, the first one is the message.
@@ -86,7 +86,7 @@ func (s *slogAdapter) Warn(args ...interface{}) {
 }
 
 // Error logs a message at Error level.
-func (s *slogAdapter) Error(args ...interface{}) {
+func (s *slogAdapter) Error(args ...any) {
 	if len(args) == 0 {
 		return
 	}
@@ -96,7 +96,7 @@ func (s *slogAdapter) Error(args ...interface{}) {
 	// If there is only one argument, it is the message.
 	if len(args) == 1 {
 		msg = fmt.Sprint(args[0])
-		args = make([]interface{}, 0)
+		args = make([]any, 0)
 	}
 
 	// If there are more than one argument, the first one is the message.
@@ -110,7 +110,7 @@ func (s *slogAdapter) Error(args ...interface{}) {
 
 // Fatal logs a message at Fatal level
 // and process will exit with status set to 1.
-func (s *slogAdapter) Fatal(args ...interface{}) {
+func (s *slogAdapter) Fatal(args ...any) {
 	if len(args) == 0 {
 		return
 	}
@@ -120,7 +120,7 @@ func (s *slogAdapter) Fatal(args ...interface{}) {
 	// If there is only one argument, it is the message.
 	if len(args) == 1 {
 		msg = fmt.Sprint(args[0])
-		args = make([]interface{}, 0)
+		args = make([]any, 0)
 	}
 
 	// If there are more than one argument, the first one is the message.

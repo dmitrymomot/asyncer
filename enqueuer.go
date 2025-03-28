@@ -40,7 +40,7 @@ func NewEnqueuerWithAsynqClient(client *asynq.Client, opt ...EnqueuerOption) (*E
 
 	e := &Enqueuer{
 		client:       client,
-		queueName:    "default",
+		queueName:    queueName,
 		taskDeadline: time.Minute,
 		maxRetry:     3,
 	}

@@ -6,31 +6,25 @@ import (
 	"github.com/hibiken/asynq"
 )
 
-// WithQueues sets the queues.
-// It panics if the sum of concurrency is not equal to the concurrency
-// set in the config.
-// If you want to increase the concurrency of a queue, you can use
-// asyncer.WithQueueConcurrency before this option.
+// WithQueues sets the queues with their priorities.
+// The map key is the queue name and the value is the priority.
+// Higher priority values give the queue higher processing preference.
 func WithQueues(queues map[string]int) QueueServerOption {
 	return func(cnf *asynq.Config) {
-		// check if sum of concurrency is equal to the concurrency
-		// set in the config.
-		var sum int
-		for _, v := range queues {
-			sum += v
+		if len(queues) > 0 {
+			cnf.Queues = queues
 		}
-		if sum != cnf.Concurrency {
-			panic("sum of concurrency is not equal to the concurrency set in the config")
-		}
-		cnf.Queues = queues
 	}
 }
 
-// WithQueueName sets the queue name.
-func WithQueueName(name string) QueueServerOption {
+// WithQueue sets the queue name.
+func WithQueue(name string, priority int) QueueServerOption {
 	return func(cnf *asynq.Config) {
+		if priority < 1 {
+			priority = 1
+		}
 		cnf.Queues = map[string]int{
-			name: cnf.Concurrency,
+			name: priority,
 		}
 	}
 }
@@ -38,16 +32,19 @@ func WithQueueName(name string) QueueServerOption {
 // WithQueueConcurrency sets the queue concurrency.
 func WithQueueConcurrency(concurrency int) QueueServerOption {
 	return func(cnf *asynq.Config) {
-		cnf.Concurrency = concurrency
-		for k := range cnf.Queues {
-			cnf.Queues[k] = concurrency
+		if concurrency < 1 {
+			concurrency = 1
 		}
+		cnf.Concurrency = concurrency
 	}
 }
 
 // WithQueueShutdownTimeout sets the queue shutdown timeout.
 func WithQueueShutdownTimeout(timeout time.Duration) QueueServerOption {
 	return func(cnf *asynq.Config) {
+		if timeout < 0 {
+			timeout = 0
+		}
 		cnf.ShutdownTimeout = timeout
 	}
 }
@@ -59,11 +56,27 @@ func WithQueueLogLevel(level string) QueueServerOption {
 	}
 }
 
+// WithQueueStrictPriority sets the queue strict priority.
+func WithQueueStrictPriority(strict bool) QueueServerOption {
+	return func(cnf *asynq.Config) {
+		cnf.StrictPriority = strict
+	}
+}
+
 // WithQueueLogger sets the queue logger.
 func WithQueueLogger(logger asynq.Logger) QueueServerOption {
 	return func(cnf *asynq.Config) {
 		if logger != nil {
 			cnf.Logger = logger
+		}
+	}
+}
+
+// WithQueueErrorHandler sets the queue error handler.
+func WithQueueErrorHandler(handler asynq.ErrorHandler) QueueServerOption {
+	return func(cnf *asynq.Config) {
+		if handler != nil {
+			cnf.ErrorHandler = handler
 		}
 	}
 }

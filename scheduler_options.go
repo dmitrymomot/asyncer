@@ -12,7 +12,9 @@ func WithSchedulerLogLevel(level string) SchedulerServerOption {
 // WithSchedulerLogger sets the scheduler logger.
 func WithSchedulerLogger(logger asynq.Logger) SchedulerServerOption {
 	return func(cnf *asynq.SchedulerOpts) {
-		cnf.Logger = logger
+		if logger != nil {
+			cnf.Logger = logger
+		}
 	}
 }
 
@@ -27,13 +29,17 @@ func WithSchedulerLocation(timeZone string) SchedulerServerOption {
 // WithPreEnqueueFunc sets the scheduler pre enqueue function.
 func WithPreEnqueueFunc(fn func(task *asynq.Task, opts []asynq.Option)) SchedulerServerOption {
 	return func(cnf *asynq.SchedulerOpts) {
-		cnf.PreEnqueueFunc = fn
+		if fn != nil {
+			cnf.PreEnqueueFunc = fn
+		}
 	}
 }
 
 // WithPostEnqueueFunc sets the scheduler post enqueue function.
 func WithPostEnqueueFunc(fn func(info *asynq.TaskInfo, err error)) SchedulerServerOption {
 	return func(cnf *asynq.SchedulerOpts) {
-		cnf.PostEnqueueFunc = fn
+		if fn != nil {
+			cnf.PostEnqueueFunc = fn
+		}
 	}
 }
